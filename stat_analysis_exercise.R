@@ -1,4 +1,4 @@
-#Exeries
+#Exercies
 # 1. 기초 통계량
 # 2. profits에 따른 CEO salary에 대한 산점도를 그리고 상관계수를 구하시오.
 # 3. profits에 따른 CEO salary에 대한 단순선형회귀식 구하고 분석
