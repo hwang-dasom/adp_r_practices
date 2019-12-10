@@ -378,6 +378,14 @@ missmap(a.out)
 freetrade$tariff <-a.out$imputation[[5]]$tariff
 missmap(freetrade)
 
+# Remove NULL values from list
+lst <- list(NULL, 1,2,3,4,5)
+lst
+sapply(lst, is.null)
+lst[sapply(lst, is.null)] <-NULL
+lst
+
+
 # Outliers - 시간 많이 쓰지 않음
 # 1st. Summary를 통해 제 1 / 3 사분위수로 1 차 판단
 # 2nd. 주요 변수 별로 box plot
