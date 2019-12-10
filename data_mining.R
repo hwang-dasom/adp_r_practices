@@ -71,3 +71,70 @@ str(glm.vs)
 anova(glm.vs, test="Chisq")
 1-pchisq(18.327, 1)
 1-pchisq(4.887, 1)
+
+#[Example 2] Neural network model (NN model)
+# A. package {nnet} - nnet()
+install.packages("nnet")
+library(nnet)
+# size: # of units in hidden layer, rang: initial random weights on[-rang, rang]
+# decay: parameter for weight decay, maxit: maximum # of iterations.
+nn.iris <- nnet(Species~Sepal.Length+Sepal.Width+Petal.Length+Petal.Width, data=iris, size=2, rang=0.1, decay=5e-4, maxit=200)
+summary(nn.iris)
+
+#적합결과 시각화예제 1
+install.packages("devtools")
+library(devtools)
+source('https://gist.githubusercontent.com/Peque/41a9e20d6687f2f3108d/raw/85e14f3a292e126f1454864427e3a189c2fe33f3/nnet_plot_update.r')
+plot.nnet(nn.iris)
+
+#적합결과 시각화 예제 2.
+install.packages("clusterGeneration")
+install.packages("scales")
+library(clusterGeneration)
+library(scales)
+library(reshape)
+plot(nn.iris)
+
+#confusion matix: 정오분류표
+table(iris$Species, predict(nn.iris, iris, type="class"))
+
+# B. {neuralnet} package - neuralnet()
+install.packages("neuralnet")
+library(neuralnet)
+
+data(infert, packages="datasets") # warning 뜸
+str(infert)
+# hidden: # of hidden neurons, err.fct: sse(the sum of squaure), ce(the cross-entropy) 
+# linear.output: applied act.fct(FALSE), otherwise, TRUE, likelyhood: ? 
+net.infert <- neuralnet(case~age+parity+induced+spontaneous, data=infert, hidden=2,
+                        err.fct="ce", linear.output = FALSE, likelihood=TRUE)
+net.infert
+
+plot(net.infert)
+# 함수 결과 '열' 확인
+names(net.infert)
+# 결과 행렬
+net.infert$result.matrix
+# 전제자료는 $data
+# 모형 적합에 사용된 자료 $covariate, $response
+# 적합값 $net.result
+# 초기 가중치 $startweights, 적합 가중치 $weights
+out <-cbind(net.infert$covariate, net.infert$net.result[[1]])
+dimnames(out) <- list(NULL, c("age", "parity", "induced", "spontaneous", "nn-output"))
+head(out)
+head(net.infert$generalized.weights[[1]])
+par(mfrow=c(2,2))
+gwplot(net.infert, selected.covariate = "age", min=-2.5, max=5)
+gwplot(net.infert, selected.covariate = "parity", min=-2.5, max=5)
+gwplot(net.infert, selected.covariate = "induced", min=-2.5, max=5)
+gwplot(net.infert, selected.covariate = "spontaneous", min=-2.5, max=5)
+par(mfrow=c(1,1))
+# 공변량 age만 0 근처에 그래프 그려짐
+# age 제외, parity, induced, spontaneous 로 신경망모형 적합 가능
+
+new.output <- compute(net.infert, 
+                      covariate = matrix(c(22,1,0,0,
+                                            22,1,1,0,
+                                            22,1,0,1,
+                                            22,1,1,1), byrow=TRUE, ncol=4))
+new.output$net.result
