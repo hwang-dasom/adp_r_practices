@@ -19,7 +19,7 @@ a$Species <- factor(a$Species)
 str(a)
 a
 
-# setosa = 1, versicolor = 2, 큰 숫자에 오즈 모형화함
+# setosa = 1, versicolor = 2, 큰 숫자에 오즈 모형화함 / binomial : 정규화분포
 b <- glm(Species~Sepal.Length, data=a, family=binomial)
 # versicolor: 귀무가설 / setosa: 대립가설
 summary(b)
@@ -68,12 +68,16 @@ summary(step.vs)
 ls(glm.vs)
 str(glm.vs)
 
+# Null 모형에서 mpg, am이 차례로 추가됨에 따라 발생하는 이탈도의 감소량 제시
 anova(glm.vs, test="Chisq")
-1-pchisq(18.327, 1)
-1-pchisq(4.887, 1)
+1-pchisq(18.327, 1) # == anova 결과 p-value: P(X^2(1) > 18.327)
+1-pchisq(4.887, 1) # == anova 결과 p-value: P(X^2(1) > 4.887)
 
 #[Example 2] Neural network model (NN model)
-# A. package {nnet} - nnet()
+# + : 변수 많을 때, 입, 출력변수 복잡한 비선형관계일 때 유용, 잡음에 강함
+# - : 결과 해석 쉽지않음, 은닉층 수& 노드 수 결정 어렵, 초기값에 따라 전역해 보다 지역해수렴 가능성
+
+# A. package {nnet} - nnet() : 1-hidden layer
 install.packages("nnet")
 library(nnet)
 # size: # of units in hidden layer, rang: initial random weights on[-rang, rang]
@@ -98,14 +102,20 @@ plot(nn.iris)
 #confusion matix: 정오분류표
 table(iris$Species, predict(nn.iris, iris, type="class"))
 
-# B. {neuralnet} package - neuralnet()
+# B. {neuralnet} package - neuralnet() : 1-hidden layer
 install.packages("neuralnet")
 library(neuralnet)
+
+iris.net <- neuralnet(Species~Sepal.Length+Sepal.Width+Petal.Length+Petal.Width, data=iris, 
+                      hidden = 2, err.fct="ce", linear.output = FALSE, likelihood=TRUE)
+iris.net
+plot(iris.net)
 
 data(infert, packages="datasets") # warning 뜸
 str(infert)
 # hidden: # of hidden neurons, err.fct: sse(the sum of squaure), ce(the cross-entropy) 
 # linear.output: applied act.fct(FALSE), otherwise, TRUE, likelyhood: ? 
+# case: 1- 사례 / 0 - 대조
 net.infert <- neuralnet(case~age+parity+induced+spontaneous, data=infert, hidden=2,
                         err.fct="ce", linear.output = FALSE, likelihood=TRUE)
 net.infert
@@ -132,9 +142,48 @@ par(mfrow=c(1,1))
 # 공변량 age만 0 근처에 그래프 그려짐
 # age 제외, parity, induced, spontaneous 로 신경망모형 적합 가능
 
+net.infert2 <- neuralnet(case~parity+induced+spontaneous, data=infert, 
+                         hidden=2, err.fct = "ce", linear.output = FALSE, likelihood = TRUE)
+plot(net.infert2)
+
 new.output <- compute(net.infert, 
                       covariate = matrix(c(22,1,0,0,
                                             22,1,1,0,
                                             22,1,0,1,
                                             22,1,1,1), byrow=TRUE, ncol=4))
 new.output$net.result
+
+new.output2 <- compute(net.infert2, covariate=matrix(c(1,0,0,
+                                                       1,1,0,
+                                                       1,0,1,
+                                                       1,1,1), byrow=TRUE, ncol=3))
+new.output2$net.result
+
+# weight 신뢰구간
+confidence.interval(net.infert, alpha=0.05)
+confidence.interval(net.infert2, alpha=0.05)
+
+# C. multiple hidden layers
+# 1-100 사이의 난수 50개 발생, 제곱근 취한 값을 자료로 구축 => 신경망 학습 => 새로운 자료 예측
+set.seed(1)
+train.input <- as.data.frame(runif(50, min=0, max=100))
+train.output <- sqrt(train.input)
+train.data <- cbind(train.input, train.output)
+colnames(train.data) <- c("Input", "Output")
+head(train.data)
+
+# 1-hidden layer, 10 nodes, threshold: 오차함수 편미분 값 - 정지규칙(stopping rule)
+net.sqrt <- neuralnet(Output~Input, train.data, hidden=10, threshold=0.01)
+print(net.sqrt)
+plot(net.sqrt)
+
+test.data <- as.data.frame((1:10)^2)
+test.out <- compute(net.sqrt, test.data)
+ls(test.out)
+print(test.out$net.result)
+
+# 2-hidden layer, 10, 8 nodes each
+net2.sqrt <- neuralnet(Output~Input, train.data, hidden=c(10,8), threshold=0.01)
+plot(net2.sqrt)
+test2.out <- compute(net2.sqrt, test.data)
+print(test2.out$net.result)
