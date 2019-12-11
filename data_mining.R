@@ -187,3 +187,81 @@ net2.sqrt <- neuralnet(Output~Input, train.data, hidden=c(10,8), threshold=0.01)
 plot(net2.sqrt)
 test2.out <- compute(net2.sqrt, test.data)
 print(test2.out$net.result)
+
+
+# 의사결정나무 모형(Decision tree)
+# + : 1. 구조 단순, 해석 용이 2. 수학적 가정이 불필요한 비모수적 모형 
+#     3. 유용한 입력 변수의 파악과 예측변수간의 상호작용 및 비선형성으 고려하여 분석 수행
+# - : 1. 연속성데이터 -> 비연속성 경계값에 오차가 큼 2. 각 예측변수의 효과 파악 어렵
+#     3. 새로운 자료에 대한 예측 불안정 가능성
+# 분류나무 - 목표변수 이산형
+# 회귀나무 - 목표변수 연속형
+# Example 1. iris 자료 활용한 의사결정 나무 분석
+install.packages("rpart")
+library(rpart)
+head(iris)
+iris <- iris[1:5]
+iris
+c <- rpart(Species~., data=iris)
+c
+plot(c, compress=T, margin=0.3)
+text(c, cex=1.5)
+
+head(predict(c, newdata=iris, type="class"))
+tail(predict(c, newdata=iris, type="class"))
+
+install.packages("rpart.plot")
+library(rpart.plot)
+prp(c, type=4, extra=1) 
+prp(c, type=4, extra=2) # 자료해석: 49/54 -> 해당 노드에 54개 분류, 그 중에 49개가 versicolor
+
+c$cptable
+opt <- which.min(c$cptable[,"xerror"])
+cp <- c$cptable[opt, "CP"] 
+prune.c <- prune(c, cp=cp)
+plot(prune.c)
+text(prune.c, use.n=F)
+
+prp(prune.c, type=4, extra=2)
+
+plotcp(c)
+
+# Example 2. 패키지 {party} - ctree()
+# 146명 환자데이터, 7개 예측변수 -> 범주형 반응변수(ploidy) 예측 또는 분류
+install.packages("party")
+library(party)
+str(stagec)
+
+stagec1 <- subset(stagec, !is.na(g2))
+stagec2 <- subset(stagec1, !is.na(gleason))
+stagec3 <- subset(stagec2, !is.na(eet))
+str(stagec3)
+
+set.seed(1234)
+ind <- sample(2, nrow(stagec3), replace=TRUE, prob=c(0.7, 0.3))
+ind
+trainData <- stagec3[ind==1, ]
+testData <- stagec3[ind==2, ]
+
+tree <- ctree(ploidy ~., data=trainData)
+tree
+plot(tree)
+
+testPred = predict(tree, newdata = testData)
+table(testPred, testData$ploidy)
+
+
+# Example 3. ctree() 함수 - 연속형 반응변수 => 회귀나무
+# airquality 자료로 의사결정나무모형 적합, Ozone 결측인 자료 제외 후, ctree()
+airq <- subset(airquality, !is.na(Ozone))
+head(airq)
+airct <- ctree(Ozone ~., data=airq)
+airct
+plot(airct)
+
+head(predict(airct, data=airq))
+predict(airct, data=airq, type="node") # where(airct)의 결과와 동일
+mean((airq$Ozone - predict(airct))^2)
+
+
+# 앙상블 (Ensemble)
