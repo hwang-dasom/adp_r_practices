@@ -388,3 +388,107 @@ for(i in 1:k){
 }
 head(trainData[[1]])
 head(trainData[[2]])
+
+# 성능평가 
+# 범주형 변수 1. 오분류표 2. ROC 그래프 3. 이익 도표 4. 향상도 곡선
+# 1. 오분류표
+# iris 일부 데이터를 이용하여 범주가 2개인 분류 모형 구축, 70%의 훈련용 자료 추출
+data(iris)
+iris.sub <- subset(iris, Species=="setosa" | Species=="versicolor")
+iris.sub$Species <- factor(iris.sub$Species)
+set.seed(1234)
+iris.sub <- iris.sub[sample(nrow(iris)),] # Randomly shuffle the data
+trainData <- iris.sub[1:(nrow(iris)*0.7),]
+testData <- iris.sub[((nrow(iris)*0.7)+1):nrow(iris),]
+nrow(trainData)
+
+# 모형학습: {nnet}'s nnet(), {rpart}'s rpart()
+library(nnet)
+library(rpart)
+
+# neural network
+nn.iris <- nnet(Species~., data=trainData, size=2, rang=0.1, decay=5e-4, maxit=200)
+
+# decision tree
+dt.iris <- rpart(Species~., data=trainData)
+
+# 검증용 자료
+nn.pred <- predict(nn.iris, testData, type="class")
+dt.pred <- predict(dt.iris, testData, type="class")
+
+# FIXME: confusionMatrix() 함수에러 처리
+#Error: `data` and `reference` should be factors with the same levels.
+nn.pred <- factor(nn.pred) # 추가함
+
+# confusion maxtrix : {caret}'s confusionMatirx()
+install.packages("caret")
+library(caret)
+nn.con <- confusionMatrix(nn.pred, testData$Species)
+dt.con <- confusionMatrix(dt.pred, testData$Species)
+nn.con$table
+dt.con$table
+
+# 오분류표를 이용하여 대표적인 지표를 계산, 모형 결과 비교
+# accurarcy - 정분류율
+accuracy <- c(nn.con$overall['Accuracy'], dt.con$overall['Accuracy'])
+# precision - 정확도
+precision <- c(nn.con$byClass['Pos Pred Value'], dt.con$byClass['Pos Pred Value'])
+# recall - 재현율
+recall <- c(nn.con$byClass['Sensitivity'], dt.con$byClass['Sensitivity'])
+# F1 지표
+f1 <- 2*((precision * recall)/ (precision + recall))
+
+result <- data.frame(rbind(accuracy, precision, recall, f1))
+names(result) <-c("Nerual Network", "Decision Tree")
+result
+
+# 2. ROC graph
+# Infert 자료 분류 분석 모형 평가
+# Decision tree : {C50}' C5.0(), Neural net: {neuralnet}'s neuralnet()
+# data preparation
+set.seed(1234)
+data(infert)
+infert <- infert[sample(nrow(infert)), ] # Shuffle
+infert <- infert[,c("age", "parity", "induced", "spontaneous", "case")]
+trainData <- infert[1:nrow(infert)* 0.7,]
+testData <- infert[(nrow(infert)*0.7+1): nrow(infert),]
+
+# NN model
+library(neuralnet)
+net.infert <- neuralnet(case~age+parity+induced+spontaneous, data=trainData, hidden=3, err.fct="ce", 
+                        linear.output=FALSE, likelihood = TRUE)
+n_test <- subset(testData, select=-case)
+nn_pred <- compute(net.infert, n_test)
+testData$net_pred <- nn_pred$net.result
+head(testData)
+
+# DT model
+install.packages("C50")
+library(C50)
+trainData$case <- factor(trainData$case)
+dt.infert <- C5.0(case~age+parity+induced+spontaneous, data=trainData)
+testData$dt_pred <- predict(dt.infert, testData, type="prob")[,2]
+head(testData)
+
+# ROC graph {Epi}'s ROC()
+install.packages("Epi")
+library(Epi)
+#FIXME: Error in m[, 3] : subscript out of bounds
+neural_ROC <- ROC(form=case~net_pred, data=testData, plot="ROC")
+#FIXME: Error in m[, 3] : subscript out of bounds
+dtree_ROC <- ROC(form=case~dt_pred, data=testData, plot="ROC")
+
+# 3. 이익 도표 & 4. 향상도 곡선 {ROCR}'s performance()
+install.packages("ROCR")
+library(ROCR)
+# FIXME: Error in prediction(testData$net_pred, testData$case) : 
+#         Number of classes is not equal to 2.
+#         ROCR currently supports only evaluation of binary classification tasks.
+n_r <- prediction(testData$net_pred, testData$case)
+d_r <- prediction(testData$dt_pred, testData$case)
+n_p <- performance(n_r, "tpr", "fpr") # ROC for NN
+d_p <- performance(d_r, "tpr", "fpr") # ROC for DT
+plot(n_p, col="red") # NN - red
+par(new=TRUE)
+plot(d_p, col="blue") # DT - blue
+abline(a=0, b=1) # random model - black
