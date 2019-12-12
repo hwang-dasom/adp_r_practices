@@ -194,6 +194,7 @@ print(test2.out$net.result)
 #     3. 유용한 입력 변수의 파악과 예측변수간의 상호작용 및 비선형성으 고려하여 분석 수행
 # - : 1. 연속성데이터 -> 비연속성 경계값에 오차가 큼 2. 각 예측변수의 효과 파악 어렵
 #     3. 새로운 자료에 대한 예측 불안정 가능성
+#활용분야: 고객타겟팅, 신용점수화, 캠페인 반응분석, 고객행동예측, 고객 세분화
 # 분류나무 - 목표변수 이산형
 # 회귀나무 - 목표변수 연속형
 # Example 1. iris 자료 활용한 의사결정 나무 분석
@@ -204,17 +205,21 @@ iris <- iris[1:5]
 iris
 c <- rpart(Species~., data=iris)
 c
+# 시각화 1(Decision tree visualization 1)
 plot(c, compress=T, margin=0.3)
 text(c, cex=1.5)
 
 head(predict(c, newdata=iris, type="class"))
 tail(predict(c, newdata=iris, type="class"))
 
+# 시각화2 (Decision tree visualization 2 : 더 선호함)
 install.packages("rpart.plot")
 library(rpart.plot)
 prp(c, type=4, extra=1) 
 prp(c, type=4, extra=2) # 자료해석: 49/54 -> 해당 노드에 54개 분류, 그 중에 49개가 versicolor
 
+# 가지치기(pruning) 예제
+# 트리 크기에 따른 cost-complexity parameter(비용-복잡도 모수) & cross-validation error(교차타당성 오차)
 c$cptable
 opt <- which.min(c$cptable[,"xerror"])
 cp <- c$cptable[opt, "CP"] 
@@ -224,7 +229,8 @@ text(prune.c, use.n=F)
 
 prp(prune.c, type=4, extra=2)
 
-plotcp(c)
+#cp 값 그리기
+plotcp(c) # {rpart} 패키지
 
 # Example 2. 패키지 {party} - ctree()
 # 146명 환자데이터, 7개 예측변수 -> 범주형 반응변수(ploidy) 예측 또는 분류
@@ -238,30 +244,147 @@ stagec3 <- subset(stagec2, !is.na(eet))
 str(stagec3)
 
 set.seed(1234)
-ind <- sample(2, nrow(stagec3), replace=TRUE, prob=c(0.7, 0.3))
+ind <- sample(2, nrow(stagec3), replace=TRUE, prob=c(0.7, 0.3)) # 7:3 index
 ind
-trainData <- stagec3[ind==1, ]
-testData <- stagec3[ind==2, ]
+trainData <- stagec3[ind==1, ] # .7 ind -> train data
+testData <- stagec3[ind==2, ] # .3 ind -> test data 
 
-tree <- ctree(ploidy ~., data=trainData)
+tree <- ctree(ploidy ~., data=trainData) # train data로 적합
 tree
+# visualization
 plot(tree)
 
 testPred = predict(tree, newdata = testData)
-table(testPred, testData$ploidy)
-
+table(testPred, testData$ploidy) # 열이름: 실제값, 행이름: 결과
 
 # Example 3. ctree() 함수 - 연속형 반응변수 => 회귀나무
 # airquality 자료로 의사결정나무모형 적합, Ozone 결측인 자료 제외 후, ctree()
 airq <- subset(airquality, !is.na(Ozone))
+airq <- subset(airq, !is.na(Solar.R))
+
 head(airq)
 airct <- ctree(Ozone ~., data=airq)
 airct
 plot(airct)
 
 head(predict(airct, data=airq))
-predict(airct, data=airq, type="node") # where(airct)의 결과와 동일
-mean((airq$Ozone - predict(airct))^2)
+predict(airct, data=airq, type="node") # 속하는 노드 번호가 나옴, where(airct)의 결과와 동일
+mean((airq$Ozone - predict(airct))^2) # 평균오차제곱
 
 
 # 앙상블 (Ensemble)
+# Bagging example {adabag}'s bagging
+install.packages("adabag")
+library(adabag)
+data(iris)
+iris.bagging <- bagging(Species~., data=iris, mfinal=10) # mfinal: # of iterations
+iris.bagging$importance
+plot(iris.bagging$trees[[10]])
+text(iris.bagging$trees[[10]])
+
+iris.pred <- predict(iris.bagging, newdata=iris)
+boos.tb <- table(iris.pred$class, iris[,5])
+
+#Boosting example 1. {adabag}'s boosting()
+boo.adabag <- boosting(Species~., data=iris, boos=TRUE, mfinal=10)
+boo.adabag$importance
+
+plot(boo.adabag$trees[[10]])
+text(boo.adabag$trees[[10]])
+boo.pred <- predict(boo.adabag, newdata=iris)
+tb <- table(boo.pred$class, iris[,5])
+tb
+
+# 오분류율
+boos.error.rpart <- 1-(sum(diag(tb))/sum(tb))
+boos.error.rpart
+
+bag.error.rpart <- 1-(sum(diag(boos.tb))/sum(boos.tb))
+bag.error.rpart
+
+# Boosting example 2. {dad}'s ada()
+install.packages("ada")
+library(ada)
+
+iris[iris$Species!='setosa', ] -> iris # 'setosa' 데이터 제외
+n <- dim(iris)[1]
+n
+dim(iris)
+
+tr.idx <- sample(1:n, floor(.6*n), FALSE)
+te.idx <- sample(1:n, tr.idx)
+iris[, 5] <- as.factor((levels(iris[, 5])[2:3])[as.numeric(iris[, 5])-1])
+
+gdis <- ada(Species~., data=iris[tr.idx,], iter=20, nu=1, type="discrete")
+gdis <- addtest(gdis, iris[te.idx, -5], iris[te.idx, 5])
+gdis
+
+# 오차와 일치도를 나타내는 카파(kappa)계수 그림
+plot(gdis, TRUE, TRUE) # train / test둘다
+varplot(gdis) # 변수의 중요도
+pairs(gdis, iris[tr.idx, -5], maxvar=4)
+
+
+# Random Forest example 1. {randomForest}'s randomForest()
+install.packages("randomForest")
+library(randomForest)
+library(rpart)
+
+#Data 준비
+data(stagec)
+stagec3 <- stagec[complete.cases(stagec), ] # complete.cases() : dealing with missing values
+set.seed(1234)
+ind <- sample(2, nrow(stagec3), replace=TRUE, prob=c(0.7, 0.3))
+trainData <- stagec3[ind==1,]
+nrow(trainData)
+testData <- stagec3[ind==2, ]
+nrow(testData)
+# 모형 생성
+rf <- randomForest(ploidy~., data=trainData, ntree=100, proximity=TRUE)
+
+#결과
+table(predict(rf), trainData$ploidy)
+print(rf) # print Confusion Matrix, OOB(Out-of-bag) 추정치
+plot(rf) # 종속변수의 범주별 오분류율 (검은색 - 전체)
+importance(rf) # 변수의 중요성
+varImpPlot(rf) # 불순도 감소값 - 클수록 순수도 증가
+plot(margin(rf)) # 양의 값(+) : 정확한 분류 / 음의 값(-) : 잘못된 분류
+
+#예측
+rf.pred <- predict(rf, newdata=testData)
+table(rf.pred, testData$ploidy)
+
+# 2. {party}'s cforest()
+library(party)
+set.seed(1234)
+cf <- cforest(ploidy~., data=trainData)
+table(predict(cf), trainData$ploidy)
+cf.pred <- predict(cf, newdata=testData, OOB=TRUE, type="response")
+table(cf.pred, testData$ploidy)
+
+# 모형평가 (Model Evaluation)
+# 1. hold-out : sample() - 전체의 70% 훈련용, 30% 모데 검증용으로 사용
+data(iris)
+nrow(iris)
+set.seed(1234)
+idx <- sample(2, nrow(iris), replace = TRUE, prob=c(0.7, 0.3)) # 1. train data, 2. test data
+trainData <- iris[idx==1, ]
+testData <- iris[idx==2, ]
+nrow(trainData)
+nrow(testData)
+
+# 2. 교차검증, Cross validation을 위해 데이터 추출
+data(iris)
+set.seed(1234)
+k = 10 # 10-fold cross validation
+iris <- iris[sample(nrow(iris)), ] # randomly suffle the data
+folds <- cut(seq(1, nrow(iris)), breaks=k, labels=F)
+trainData = list(0)
+testData = list(0)
+for(i in 1:k){
+  testIdx <- which(folds==i, arr.ind=TRUE)
+  testData[[i]] <- iris[testIdx, ]
+  trainData[[i]]<- iris[-testIdx, ]
+}
+head(trainData[[1]])
+head(trainData[[2]])
