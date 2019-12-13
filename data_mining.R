@@ -178,15 +178,14 @@ print(net.sqrt)
 plot(net.sqrt)
 
 test.data <- as.data.frame((1:10)^2)
-test.out <- compute(net.sqrt, test.data)
-ls(test.out)
-print(test.out$net.result)
+test.out <- predict(net.sqrt, test.data)
+print(test.out)
 
 # 2-hidden layer, 10, 8 nodes each
 net2.sqrt <- neuralnet(Output~Input, train.data, hidden=c(10,8), threshold=0.01)
 plot(net2.sqrt)
-test2.out <- compute(net2.sqrt, test.data)
-print(test2.out$net.result)
+test2.out <- predict(net2.sqrt, test.data)
+print(test2.out)
 
 
 # 의사결정나무 모형(Decision tree)
@@ -500,3 +499,279 @@ t_lift <- performance(d_r, "lift", "rpp")
 plot(t_lift, col="blue")
 abline(v=0.2)
 
+# 3. Cluster Analysis 군집분석
+# 반응변수 필요x, 개체들간의 유사성에 기초하여 군집 형성
+# 1. 계층적 군집: 병합적 방법, 분할적 방법 - 최단연결/최장연결/평균연결/중신연결/와드연결
+# Example 1. hclsut()
+# Data: USArrests, dist() - 거리(비유사성)행렬제공, method 옵션으로 거리 정의
+data(USArrests)
+str(USArrests)
+d <- dist(USArrests, method="euclidean")
+# 군집
+fit <- hclust(d, method='ave')
+
+# 시각화 - 덴드로그램
+par(mfrow=c(1,2))
+plot(fit)
+plot(fit, hang = -1) # 이쁘게 그려줌
+par(mfrow=c(1,1))
+
+# 그룹나누기(높이:h, 그룹 수:k)
+groups <- cutree(fit, k=6)
+groups
+# 덴도로그램 - k를 이용해 그룹 표시
+plot(fit)
+rect.hclust(fit, k=6, border="red")
+# h 나 which 를 이용하여 그룹 전체 또는 부분 표시
+hca <- hclust(dist(USArrests))
+plot(hca)
+rect.hclust(hca, k=3, border="red")
+rect.hclust(hca, h=50, which=c(2,7), border=3:4)
+
+# Example 2. Agglomerative clustering 병합적 방식
+# {cluster}'s agnes(): 거리계산 metric옵션 or daisy() , method
+# daisy() 수치형이 아닌 자료도 거리계산가능
+install.packages("cluster")
+library(cluster)
+
+agn1 <- agnes(USArrests, metric="manhattan", stand=T)
+agn1
+par(mfrow=c(1,2))
+plot(agn1)
+
+agn2 <- agnes(daisy(USArrests), diss=TRUE, method="complete")
+plot(agn2)
+
+agn3 <- agnes(USArrests, method="flexible", par.meth=0.6)
+plot(agn3)
+
+par(mfrow=c(1,1))
+
+# 2. k-means clustering - 모든 변수가 연속적이어야함
+# 초기 값 k 설정, {자료-평균} 오차 제곱합 최소로 되게 데이터 할당
+# - 초기 중심값 영향 받음, 잡음이나 이상값, non-convex에 성능 x
+# + 알고리즘 단순, 빠름, 계층적 군집보다 많은 양 자료 가능
+# 이상값 미리 제거하고 분석 수행하는게 나음, nstart=25추천
+# {stats}'s kmeans(), {flexclust}'s kcca(), cclust(), 
+# {cclust}'s cclust(), {amap}'s Kmeans()
+# k-medoids clustering: pam()
+
+# 적절한 군집수 찾기
+install.packages("NbClust")
+library(NbClust)
+# data - numeric, nc = maximun # of clusters
+wssplot <- function(data, nc=15, seed=1234){
+            wss <- (nrow(data)-1)*sum(apply(data,2,var))
+            for(i in 2:nc){
+              set.seed(seed)
+              wss[i] <- sum(kmeans(data, centers=i)$withinss)
+            }
+            plot(1:nc, wss, type="b", xlab="Number of Clusters", 
+                 ylab = "Within groups sum of square")
+            }
+# Example 1.
+# Data
+data(wine)
+head(wine)
+# Find the # of clusters
+df <- scale(wine[-1])
+wssplot(df)
+set.seed(1234)
+nc <- NbClust(df, min.nc=2, max.nc=15, method='kmeans')
+table(nc$Best.n[1,])
+barplot(table(nc$Best.n[1,]),
+        xlab="Number of Clusters", ylab="Number of Criteria",
+        main="Number of Clusters Chosen by 26 Criteria")
+# => 3 cluters
+
+#kmean
+set.seed(1234)
+fit.km <- kmeans(df, 3, nstart=25)
+#results
+fit.km$size
+fit.km$centers
+plot(df, col=fit.km$cluster)
+points(fit.km$center, col=1:3, pch=8, cex=1.5)
+
+aggregate(wine[-1], by=list(cluster=fit.km$cluster), mean)
+#정오분류표
+ct.km <- table(wine$Type, fit.km$cluster)
+ct.km
+
+# Adjusted rank index - 수정된 순위지수: 실제데이터와 군집간의 일치도
+# -1: No agreement ~ 1: perfect agreement
+install.packages("flexclust")
+library(flexclust)
+randIndex(ct.km)
+
+# Example 2. 
+data("Nclus")
+plot(Nclus)
+# k-means
+# kcca() : k-centroids clustering, family 옵션으로 kmeans  
+cl <- kcca(Nclus, k=4, family=kccaFamily("kmeans"))
+# kcca()결과는 아래와 같이 시각화 가능
+# visualization
+image(cl)
+points(Nclus)
+barplot(cl) # 각 군집의 중심 <-> 전체의 중심(막대)
+stripes(cl) # 해당 군집의 평균과 각 자료 사이의 거리
+barchart(cl)
+
+# Example 3. {cclust}'s cclust()
+install.packages("cclust")
+library(cclust)
+# # of cluster :4, iter.max = 20
+cl.1 <- cclust(Nclus, 4, 20, method="kmeans")
+
+plot(Nclus, col=cl.1$cluster)
+points(cl.1$center, col=1:4, pch=8, cex=1.5)
+
+# library(cluster)
+clusplot(Nclus, cl.1$cluster)
+
+
+# Mixture distribution clustering, 혼합 분포 군집
+#  Model-based
+# {mixtools}, {mclust}, {norlmix}, {HDclassif}, {EMcluster}
+# k-means와 마찬가지로 이상값에 민감
+# Example 1. {mixtools}'s normalmixEM()
+install.packages("mixtools")
+library(mixtools)
+
+# Data
+data(faithful)
+attach(faithful)
+
+hist(waiting, main="Time between Old Faithful eruptions", 
+     xlab="Minutes", ylab="", cex.main=1.5, cex.lab=1.5, cex.axis=1.4)
+
+# EM algorithm
+wait1 <- normalmixEM(waiting, lambda=.5, mu=c(55, 80), sigma=5)
+summary(wait1)
+# Observed Data log-likelihood - 2회만에 함수 최대
+plot(wait1, density=T, cex.axis=1.4, cex.lab=1.4, cex.main=1.8,
+     main2="Time between Old Faith eruptions", xlab2="Minutes")
+
+# Example 2. {mclust}'s Mclust()
+install.packages("mclust")
+library(mclust)
+
+data(iris)
+# G : # of mixture
+mc <- Mclust(iris[, 1:4],G=3)
+summary(mc)
+
+plot.Mclust(mc)
+
+str(mc)
+mc$classification # 각 개체의 분류 결과
+# 새로운 자료에 대한 분류
+# predict(mc, data=)
+
+
+# 4. SOM(Self-Organizing Maps)
+# {kohonen}'s som()
+install.packages("kohonen")
+library("kohonen")
+
+data("wines")
+str(wines)
+head(wines)
+wines.sc <- scale(wines)
+
+set.seed(7)
+som.wines <- som(scale(wines), grid = somgrid(5, 4, "hexagonal"))
+wine.som <- som(data=wines.sc, grid=somgrid(5,4,"hexagonal"),
+                rlen=100, alpha=c(0.05, 0.01), keep.data=TRUE)
+
+plot(som.wines, main="wine data")
+
+summary(som.wines)
+
+# visualization examples
+par(mfrow=c(1,3))
+plot(som.wines, type="counts", main="wine data: counts")
+plot(som.wines, type="quality", main="wind data: mapping quality")
+#plot(som.wines, type="mapping", labels=wine.classes, col=wine.classes, main="mapping plot")
+
+par(mfrow=c(1,3))
+colour1 <- tricolor(som.wines$grid)
+plot(som.wines, "mapping", bg=rgb(colour1))
+colour2 <- tricolor(som.wines$grid, phi=c(pi/6,0,-pi/6))
+plot(som.wines, "mapping", bg=rgb(colour2))
+colour3 <- tricolor(som.wines$grid, phi=c(pi/6,0,-pi/6), offset=.5)
+plot(som.wines, "mapping", bg=rgb(colour3))
+
+# results
+par(mfrow=c(1,2))
+
+dists <- unit.distances(som.wines$grid, toroidal=F)
+plot(som.wines, type="property", property=dists[1,], 
+     main="Distances to unit 1", zlim=c(0,6),
+     palette = rainbow, ncolors=7)
+
+dists <- unit.distances(som.wines$grid, toroidal=F)
+plot(som.wines, type='property', property=dists[1,],
+     main="Distances to unit 1", zlim=c(0,2),
+     palette=rainbow, ncolors=2)
+
+# 학습되는 동안의 유사도 변화
+data("wines")
+wines.sc <- scale(wines)
+
+set.seed(7)
+
+wine.som <- som(wines.sc, grid = somgrid(5, 4, "hexagonal"), rlen=100,
+                alpha=c(0.05, 0.01), keep.data=TRUE)
+
+wine.som_1 <- som(wines.sc, grid = somgrid(5, 4, "hexagonal"), rlen=500,
+                  alpha=c(0.05, 0.01), keep.data=TRUE)
+
+par(mfrow=c(1,2))
+
+plot(wine.som, type="changes", main="Wine data: SOM(Learning no = 100")
+plot(wine.som_1, type="changes", main="Wine data: SOM(Learning no = 500")
+
+# ggplot2
+install.packages("ggplot2")
+library(ggplot2)
+
+wines.sc <- as.data.frame(wines)
+wines.sc$clusterX <- wine.som_1$grid$pts[wine.som$unit.classif, "x"]
+wines.sc$clusterY <- wine.som_1$grid$pts[wine.som$unit.classif, "y"]
+
+p <- ggplot(wines.sc, aes(clusterX, clusterY))
+p+geom_jitter(position=position_jitter(width=0.4, height=0.3))
+
+
+# Association Rule 연관분석
+# {arules}'s apriori()
+install.packages("arules")
+library(arules)
+
+data(Adult)
+Adult
+
+# simple analysis
+rules <- apriori(Adult)
+
+# results
+inspect(head(rules))
+
+# more specific
+adult.rules <- apriori(Adult, parameter=list(support=0.1, confidence=0.6),
+                       appearance = list(rhs=c('income=small', 'income=large'),
+                                         default='lhs'),
+                       control=list(verbose=F))
+adult.rules.sorted <- sort(adult.rules, by='lift')
+inspect(head(adult.rules.sorted))
+
+# visualization
+install.packages("arulesViz")
+library(arulesViz)
+
+# support-confidence-lift
+plot(adult.rules.sorted, method="scatterplot")
+par(mfrow=c(1,1))
+plot(adult.rules.sorted, method="graph", control=list(type='items', alpha=0.5))
