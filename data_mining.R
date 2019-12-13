@@ -458,8 +458,8 @@ library(neuralnet)
 net.infert <- neuralnet(case~age+parity+induced+spontaneous, data=trainData, hidden=3, err.fct="ce", 
                         linear.output=FALSE, likelihood = TRUE)
 n_test <- subset(testData, select=-case)
-nn_pred <- compute(net.infert, n_test)
-testData$net_pred <- nn_pred$net.result
+nn_pred <- predict(net.infert, n_test)
+testData$net_pred <- nn_pred
 head(testData)
 
 # DT model
@@ -473,22 +473,30 @@ head(testData)
 # ROC graph {Epi}'s ROC()
 install.packages("Epi")
 library(Epi)
-#FIXME: Error in m[, 3] : subscript out of bounds
 neural_ROC <- ROC(form=case~net_pred, data=testData, plot="ROC")
-#FIXME: Error in m[, 3] : subscript out of bounds
 dtree_ROC <- ROC(form=case~dt_pred, data=testData, plot="ROC")
 
 # 3. 이익 도표 & 4. 향상도 곡선 {ROCR}'s performance()
 install.packages("ROCR")
 library(ROCR)
-# FIXME: Error in prediction(testData$net_pred, testData$case) : 
-#         Number of classes is not equal to 2.
-#         ROCR currently supports only evaluation of binary classification tasks.
+
+# Create a prediction object, arg1: predictions/arg2:class lables
 n_r <- prediction(testData$net_pred, testData$case)
 d_r <- prediction(testData$dt_pred, testData$case)
+#?performance() Details 참고. 
+#ROC curves: tpr + fpr
 n_p <- performance(n_r, "tpr", "fpr") # ROC for NN
 d_p <- performance(d_r, "tpr", "fpr") # ROC for DT
 plot(n_p, col="red") # NN - red
 par(new=TRUE)
 plot(d_p, col="blue") # DT - blue
 abline(a=0, b=1) # random model - black
+# Lift charts : lift + rpp
+n_lift <- performance(n_r, "lift", "rpp")
+plot(n_lift, col="red")
+abline(v=0.2) # black
+
+t_lift <- performance(d_r, "lift", "rpp")
+plot(t_lift, col="blue")
+abline(v=0.2)
+
